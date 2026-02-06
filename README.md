@@ -16,6 +16,9 @@ This project focuses on building a reproducible data pipeline that ingests offic
 
 Phase 1 focuses on **Mississippi State Baseball – 2025 Season**.
 
+2008–2009 pending parser support due to legacy HTML format.
+
+
 ---
 
 ## Project Structure

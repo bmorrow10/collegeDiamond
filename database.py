@@ -20,7 +20,8 @@ def create_tables(conn):
             hr INTEGER,
             rbi INTEGER,
             obp REAL,
-            season INTEGER
+            season INTEGER,
+            team TEXT
         )
     """)
 
@@ -33,70 +34,92 @@ def create_tables(conn):
             ip REAL,
             so INTEGER,
             hr INTEGER,
-            season INTEGER
+            season INTEGER,
+            team TEXT
         )
     """)
 
     conn.commit()
 
 
-def load_csv_to_db(conn):
-    batting_path = DATA_DIR / "batting_2025.csv"
-    pitching_path = DATA_DIR / "pitching_2025.csv"
+def load_batting(conn):
+    for csv in DATA_DIR.glob("batting_*.csv"):
+        year = int(csv.stem.split("_")[1])
+        print(f"Loading batting {year}")
 
-    batting_df = pd.read_csv(batting_path)
-    pitching_df = pd.read_csv(pitching_path)
+        df = pd.read_csv(csv)
 
-    # ---- RENAME COLUMNS ----
-    batting_df = batting_df.rename(
-        columns={
-            "Player": "player",
-            "avg": "avg",
-            "ab": "ab",
-            "r": "r",
-            "h": "h",
-            "hr": "hr",
-            "rbi": "rbi",
-            "ob%": "obp",
-        }
-    )
+        df = df.rename(
+            columns={
+                "Player": "player",
+                "avg": "avg",
+                "ab": "ab",
+                "r": "r",
+                "h": "h",
+                "hr": "hr",
+                "rbi": "rbi",
+                "ob%": "obp",
+            }
+        )
 
-    pitching_df = pitching_df.rename(
-        columns={
-            "Player": "player",
+        df["season"] = year
+        df["team"] = "MSST"
+
+        df = df[["player", "avg", "ab", "r", "h", "hr", "rbi", "obp", "season", "team"]]
+
+        df.to_sql("batting_stats", conn, if_exists="append", index=False)
+
+
+def load_pitching(conn):
+    for csv in DATA_DIR.glob("pitching_*.csv"):
+        year = int(csv.stem.split("_")[1])
+        print(f"Loading pitching {year}")
+
+        df = pd.read_csv(csv)
+
+        # Normalize column names
+        df.columns = (
+            df.columns.str.lower()
+            .str.strip()
+            .str.replace("%", "")
+            .str.replace("-", "")
+            .str.replace(" ", "")
+        )
+
+        # Debug once if needed
+        # print(year, df.columns)
+
+        rename_map = {
+            "player": "player",
             "era": "era",
-            "w-l": "w",
-            "app-gs": "app",
+            "wl": "w",
+            "appgs": "app",
             "ip": "ip",
             "so": "so",
             "hr": "hr",
         }
-    )
 
-    # ---- ADD SEASON ----
-    batting_df["season"] = 2025
-    pitching_df["season"] = 2025
+        df = df.rename(columns=rename_map)
 
-    # ---- FILTER COLUMNS ----
-    batting_df = batting_df[
-        ["player", "avg", "ab", "r", "h", "hr", "rbi", "obp", "season"]
-    ]
+        df["season"] = year
+        df["team"] = "MSST"
 
-    pitching_df = pitching_df[["player", "era", "w", "app", "ip", "so", "hr", "season"]]
+        # Keep only columns that actually exist
+        wanted = ["player", "era", "w", "app", "ip", "so", "hr", "season", "team"]
+        df = df[[c for c in wanted if c in df.columns]]
 
-    # ---- WRITE TO DB ----
-    batting_df.to_sql("batting_stats", conn, if_exists="append", index=False)
-    pitching_df.to_sql("pitching_stats", conn, if_exists="append", index=False)
+        df.to_sql("pitching_stats", conn, if_exists="append", index=False)
 
 
 def main():
     conn = sqlite3.connect(DB_NAME)
 
     create_tables(conn)
-    load_csv_to_db(conn)
+    load_batting(conn)
+    load_pitching(conn)
 
     conn.close()
-    print("Database loaded successfully.")
+    print("Database fully loaded.")
 
 
 if __name__ == "__main__":
