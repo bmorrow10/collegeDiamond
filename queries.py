@@ -6,11 +6,9 @@ conn = sqlite3.connect("college_baseball.db")
 
 df = pd.read_sql(
     """
-SELECT player, SUM(hr) AS career_hr
-FROM batting_stats
-GROUP BY player
-ORDER BY career_hr DESC
-LIMIT 10
+    SELECT player, season, ROUND(obp+slg,3) AS ops
+    FROM batting_stats
+    ORDER BY ops DESC;
 """,
     conn,
 )
