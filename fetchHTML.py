@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pandas as pd
 
-DATA_DIR = Path("data")
+DATA_DIR = Path("data/raw")
 DATA_DIR.mkdir(exist_ok=True)
 
 
