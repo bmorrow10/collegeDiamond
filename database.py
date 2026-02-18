@@ -1,17 +1,21 @@
+import logging
 import sqlite3
 from pathlib import Path
 
 import pandas as pd
 
 # -------------------------
-# PATHS
+# CONFIG
 # -------------------------
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data" / "raw"
 DB_PATH = BASE_DIR / "data" / "processed" / "college_baseball.db"
+TEAM_NAME = "MSST"
 
-# Ensure processed dir exists
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger(__name__)
 
 
 # -------------------------
@@ -52,6 +56,20 @@ def create_tables(conn):
         )
     """)
 
+    # ---- INDEXES ----
+    cur.execute(
+        "CREATE INDEX IF NOT EXISTS idx_batting_player ON batting_stats(player)"
+    )
+    cur.execute(
+        "CREATE INDEX IF NOT EXISTS idx_batting_season ON batting_stats(season)"
+    )
+    cur.execute(
+        "CREATE INDEX IF NOT EXISTS idx_pitching_player ON pitching_stats(player)"
+    )
+    cur.execute(
+        "CREATE INDEX IF NOT EXISTS idx_pitching_season ON pitching_stats(season)"
+    )
+
     conn.commit()
 
 
@@ -79,9 +97,22 @@ def coerce_numeric(df, cols):
 def clean_player_column(df):
     if "name" in df.columns and "player" not in df.columns:
         df = df.rename(columns={"name": "player"})
+
     if "player" in df.columns:
-        df["player"] = df["player"].astype(str).str.strip()
+        df["player"] = (
+            df["player"].astype(str).str.strip().replace({"nan": None, "": None})
+        )
+        df = df.dropna(subset=["player"])
+
     return df
+
+
+def safe_read_csv(path):
+    try:
+        return pd.read_csv(path, encoding="utf-8", engine="python")
+    except Exception as e:
+        log.warning(f"Failed reading {path}: {e}")
+        return pd.DataFrame()
 
 
 # -------------------------
@@ -90,13 +121,17 @@ def clean_player_column(df):
 def load_batting(conn):
     for csv in sorted(DATA_DIR.glob("batting_*.csv")):
         year = int(csv.stem.split("_")[1])
-        print(f"Loading batting {year}")
+        log.info(f"Loading batting {year}")
 
-        df = pd.read_csv(csv)
+        df = safe_read_csv(csv)
+        if df.empty:
+            log.warning(f"Skipping empty file {csv}")
+            continue
+
         df = normalize_cols(df)
         df = clean_player_column(df)
 
-        # Column aliases
+        # ---- COLUMN ALIASES ----
         rename_map = {
             "ob_pct": "obp",
             "ob": "obp",
@@ -108,13 +143,12 @@ def load_batting(conn):
         }
         df = df.rename(columns=rename_map)
 
-        # Remove non-players
+        # ---- REMOVE NON-PLAYERS ----
         if "player" in df.columns:
             df = df[~df["player"].isin(["Totals", "Opponents"])]
 
-        # Add season/team
         df["season"] = year
-        df["team"] = "MSST"
+        df["team"] = TEAM_NAME
 
         wanted = [
             "player",
@@ -138,10 +172,10 @@ def load_batting(conn):
         if "obp" in df.columns and "slg" in df.columns:
             df = df.dropna(subset=["obp", "slg"], how="all")
 
-        # Prevent duplicates by season overwrite
-        conn.execute("DELETE FROM batting_stats WHERE season = ?", (year,))
-
-        df.to_sql("batting_stats", conn, if_exists="append", index=False)
+        # ---- TRANSACTION SAFE OVERWRITE ----
+        with conn:
+            conn.execute("DELETE FROM batting_stats WHERE season = ?", (year,))
+            df.to_sql("batting_stats", conn, if_exists="append", index=False)
 
 
 # -------------------------
@@ -150,35 +184,29 @@ def load_batting(conn):
 def load_pitching(conn):
     for csv in sorted(DATA_DIR.glob("pitching_*.csv")):
         year = int(csv.stem.split("_")[1])
-        print(f"Loading pitching {year}")
+        log.info(f"Loading pitching {year}")
 
-        df = pd.read_csv(csv)
+        df = safe_read_csv(csv)
+        if df.empty:
+            log.warning(f"Skipping empty file {csv}")
+            continue
+
         df = normalize_cols(df)
         df = clean_player_column(df)
 
         df["season"] = year
-        df["team"] = "MSST"
+        df["team"] = TEAM_NAME
 
-        wanted = [
-            "player",
-            "season",
-            "team",
-            "era",
-            "w_l",
-            "app_gs",
-            "ip",
-            "so",
-            "hr",
-        ]
+        wanted = ["player", "season", "team", "era", "w_l", "app_gs", "ip", "so", "hr"]
 
         df = df[[c for c in wanted if c in df.columns]]
         df = df.rename(columns={"app_gs": "app"})
 
         df = coerce_numeric(df, ["era", "app", "ip", "so", "hr"])
 
-        conn.execute("DELETE FROM pitching_stats WHERE season = ?", (year,))
-
-        df.to_sql("pitching_stats", conn, if_exists="append", index=False)
+        with conn:
+            conn.execute("DELETE FROM pitching_stats WHERE season = ?", (year,))
+            df.to_sql("pitching_stats", conn, if_exists="append", index=False)
 
 
 # -------------------------
@@ -190,7 +218,7 @@ def main():
         load_batting(conn)
         load_pitching(conn)
 
-    print("Database fully loaded.")
+    log.info("Database fully loaded.")
 
 
 if __name__ == "__main__":

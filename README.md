@@ -1,8 +1,17 @@
-# College Baseball Data Project
+# College Diamond: A College Baseball Data Project
 
-An open-source effort to standardize and analyze college baseball statistics, starting with Mississippi State University baseball data.
+College Diamond is an open-source sabermetrics project focused on bringing advanced baseball analytics to NCAA college baseball data.
 
-This project focuses on building a reproducible data pipeline that ingests official athletics statistics, stores them in a structured database, and enables analytics and visualization using Python and R.
+The project collects publicly available team statistics, normalizes them into a structured database, and calculates modern performance metrics such as OPS, OPS+, ISO, and advanced pitching rates.
+
+Features
+
+ - Automated stat scraping and CSV ingestion
+ - SQLite database pipeline
+ - Batting metrics (OPS, OPS+, ISO, rate stats)
+ - Pitching metrics (K/9, HR/9, K/HR ratio)
+ - Dynamic leaderboards
+ - R and Python notebook support
 
 ---
 
@@ -23,14 +32,24 @@ Phase 1 focuses on **Mississippi State Baseball – 2025 Season**.
 
 ## Project Structure
 
-collegeBaseball/
-fetchHTML.py # Downloads raw HTML stats
-parseHTML.py # Parses HTML into structured data
-database.py # Creates SQLite database
-queries.py # Example SQL queries
-data/ # Raw and processed data
-notebooks/
-leaderboard.R # Example ggplot visualization
+collegeDiamond/
+│
+├── data/
+│   ├── raw/         # Source CSV/XML files
+│   └── processed/   # SQLite database
+│
+├── database.py       # ETL pipeline (CSV → SQLite)
+├── metrics.py        # Sabermetric calculations
+├── leaderboards.py   # Console analytics output
+├── fetchHTML.py      # Data retrieval
+├── config.py         # Central configuration
+│
+├── notebooks/
+│   └── leaderboard.R # Example ggplot visualization
+│
+├── requirements.txt
+└── README.md
+
 
 
 ---
@@ -42,7 +61,7 @@ leaderboard.R # Example ggplot visualization
 
 Python packages:
 
-pip install requests pandas
+pip install -r requirements.txt
 
 
 ---
@@ -82,7 +101,7 @@ Statistics are sourced from official Mississippi State Athletics:
 
 https://hailstate.com
 
-This project is not affiliated with Mississippi State University.
+This project is not affiliated with Mississippi State University and is intended for educational and analytical purposes only.
 
 ---
 
